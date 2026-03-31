@@ -56,6 +56,18 @@ To update an existing self-hosted deployment to a new Huly version:
    docker compose up -d
    ```
 
+## Disable default content in new workspaces
+
+By default, Huly can initialize new workspaces with predefined content. To disable that behavior, set `INIT_REPO_DIR` in the `workspace` service to a non-existing path:
+
+```yaml
+workspace:
+  image: hardcoreeng/workspace:${HULY_VERSION}
+  environment:
+    # ...
+    - INIT_REPO_DIR=/no-init-scripts
+```
+
 ## Architecture Overview
 
 For detailed information about the Huly self-hosted architecture, services, and their interactions, see [ARCHITECTURE_OVERVIEW.md](ARCHITECTURE_OVERVIEW.md).
