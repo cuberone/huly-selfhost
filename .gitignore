@@ -9,5 +9,6 @@ huly_v7.conf
 .rp.secret
 .idea
 release.sh
+CLAUDE.md
 .claude
 .vscode
