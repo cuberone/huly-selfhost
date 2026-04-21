@@ -107,27 +107,65 @@ services:
       - huly_net
     # Required by HulyPulse (push notifications / real-time updates)
 
-#  hulypulse:
- #   image: hardcoreeng/service_hulypulse:${HULY_PULSE_VERSION:-0.1.29}
- #   ports:
- #     - 8099:8099
- #   environment:
- #     - HULY_BIND_PORT=8099
- #     - HULY_LOG=info
- #     - HULY_TOKEN_SECRET=${SECRET}
- #     - HULY_HEARTBEAT_TIMEOUT=60
- #     - HULY_BACKEND=memory
- #     # For Redis backend instead of in-memory (optional, e.g. multi-node setups):
- #     - HULY_BACKEND=redis
- #     - HULY_REDIS_MODE=direct
- #     - HULY_REDIS_URLS=redis://redis:6379
- #   deploy:
- #     resources:
- #       limits:
- #         memory: 512M
- #   restart: unless-stopped
- #   networks:
- #     - huly_net
+  hulypulse:
+    image: hardcoreeng/service_hulypulse:${HULY_PULSE_VERSION:-0.1.29}
+    ports:
+      - 8099:8099
+    environment:
+      - HULY_BIND_PORT=8099
+      - HULY_LOG=info
+      - HULY_TOKEN_SECRET=${SECRET}
+      - HULY_HEARTBEAT_TIMEOUT=60
+      - HULY_BACKEND=memory
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: unless-stopped
+    networks:
+      - huly_net
+
+  love:
+    image: hardcoreeng/love:${HULY_VERSION}
+    ports:
+      - 8096:8096
+    environment:
+      - PORT=8096
+      - SECRET=${SECRET}
+      - ACCOUNTS_URL=http://account:3000
+      - DB_URL=${CR_DB_URL}
+      - STORAGE_CONFIG=minio|minio?accessKey=minioadmin&secretKey=minioadmin
+      - STORAGE_PROVIDER_NAME=minio
+      - LIVEKIT_HOST=${LIVEKIT_HOST}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    restart: unless-stopped
+    networks:
+      - huly_net
+
+  aibot:
+    image: hardcoreeng/ai-bot:${HULY_VERSION}
+    ports:
+      - 4010:4010
+    environment:
+      - STORAGE_CONFIG=minio|minio?accessKey=minioadmin&secretKey=minioadmin
+      - SERVER_SECRET=${SECRET}
+      - ACCOUNTS_URL=http://account:3000
+      - DB_URL=${CR_DB_URL}
+      - MONGO_URL=mongodb://mongodb:27017
+      - STATS_URL=http://stats:4900
+      - FIRST_NAME=Huly
+      - LAST_NAME=AI
+      - PASSWORD=${AIBOT_PASSWORD}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL}
+      - AI_OPENAI_MODEL=openai/gpt-4o-mini
+      - AI_OPENAI_TRANSLATE_MODEL=openai/gpt-4o-mini
+      - AI_OPENAI_SUMMARY_MODEL=openai/gpt-4o-mini
+      - LOVE_ENDPOINT=http://love:8096
+    restart: unless-stopped
+    networks:
+      - huly_net
 
   rekoni:
     image: hardcoreeng/rekoni-service:${HULY_VERSION}
@@ -157,6 +195,8 @@ services:
       - STATS_URL=http://stats:4900
       - LAST_NAME_FIRST=${LAST_NAME_FIRST:-true}
       - QUEUE_CONFIG=redpanda:9092
+      - PULSE_URL=http://hulypulse:8099
+      - AI_BOT_URL=http://aibot:4010
     restart: unless-stopped
     networks:
       - huly_net
@@ -235,6 +275,9 @@ services:
       - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE:-en}
       - LAST_NAME_FIRST=${LAST_NAME_FIRST:-true}
       - DESKTOP_UPDATES_CHANNEL=${DESKTOP_CHANNEL}
+      - PULSE_URL=http${SECURE:+s}://${HOST_ADDRESS}/_pulse
+      - AI_URL=http${SECURE:+s}://${HOST_ADDRESS}/_aibot
+      - LIVEKIT_WS=${LIVEKIT_HOST}
     restart: unless-stopped
     networks:
       - huly_net
