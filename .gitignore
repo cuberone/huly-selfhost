@@ -8,5 +8,3 @@ huly_v7.conf
 .cr.secret
 .rp.secret
 .idea
-certs/
-dns_update.log
