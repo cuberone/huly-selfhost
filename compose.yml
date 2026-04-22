@@ -166,15 +166,56 @@ services:
     networks:
       - huly_net
 
-  transcription-agent:
-    build: ./transcription-agent
+  # Huly's UI renders transcripts only when they arrive as ChatMessages on the
+  # meeting minutes doc, which only happens when the upstream love-agent worker
+  # POSTs them to aibot's /love/transcript. That endpoint requires a JWT with
+  # `account` == aibot's personUuid (assigned on first signup). This init step
+  # forges the token and writes it to a shared volume; love-agent reads it via
+  # its `command:` override. See love-agent-init/generate-token.sh for details.
+  love-agent-init:
+    image: alpine:3.19
     depends_on:
-      - love
+      - account
+      - aibot
     environment:
+      - SECRET=${SECRET}
+      - ACCOUNTS_URL=http://account:3000
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        apk add --no-cache --quiet curl openssl && \
+        /init/generate-token.sh
+    volumes:
+      - ./love-agent-init:/init:ro
+      - platform_token:/shared
+    restart: "no"
+    networks:
+      - huly_net
+
+  love-agent:
+    image: hardcoreeng/love-agent:${HULY_VERSION}
+    depends_on:
+      love-agent-init:
+        condition: service_completed_successfully
+    # Load PLATFORM_TOKEN from the shared volume at container start. Can't set
+    # it in `environment:` because the init step runs in a separate container
+    # and the token is only known at runtime.
+    command:
+      - /bin/sh
+      - -c
+      - |
+        export PLATFORM_TOKEN=$$(cat /shared/platform_token) && \
+        exec node index.js start
+    environment:
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - STT_PROVIDER=deepgram
       - LIVEKIT_URL=${LIVEKIT_HOST}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
-      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - PLATFORM_URL=http://aibot:4010
+    volumes:
+      - platform_token:/shared:ro
     restart: unless-stopped
     networks:
       - huly_net
@@ -369,6 +410,9 @@ volumes:
   cr_certs:
   redpanda:
   mongodb:
+  # tmpfs-style handoff for the forged PLATFORM_TOKEN that love-agent-init
+  # writes and love-agent reads. Cleared per `docker compose down -v`.
+  platform_token:
 
 networks:
   huly_net:
