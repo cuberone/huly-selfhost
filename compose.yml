@@ -173,9 +173,11 @@ services:
   #
   # The `hardcoreeng/tool` image ships a `generate-token` subcommand that does
   # the socialId lookup and mints the token via the official
-  # @hcengineering/server-token library. We retry because aibot registers its
-  # social id asynchronously on first boot — the tool falls back to the literal
-  # `email:huly.ai.bot@hc.engineering` string until that row lands.
+  # @hcengineering/server-token library. Quirk: this CLI queries `socialId.value`
+  # (plain email, no `email:` prefix) whereas the accounts-RPC findPersonBySocialKey
+  # queries `socialId.key` (prefixed). Pass the plain email here.
+  # We retry because aibot's signUp writes the socialId row async on first boot;
+  # until it lands, the tool throws `Invalid account uuid` and emits no token.
   love-agent-init:
     image: hardcoreeng/tool:${HULY_VERSION}
     depends_on:
@@ -191,17 +193,17 @@ services:
         i=0
         while [ $$i -lt 60 ]; do
           i=$$((i + 1))
-          TOKEN=$$(node /usr/src/app/bundle.js generate-token email:huly.ai.bot@hc.engineering '' 2>/dev/null || true)
+          TOKEN=$$(node /usr/src/app/bundle.js generate-token huly.ai.bot@hc.engineering '' 2>/dev/null || true)
           ACCOUNT=$$(printf '%s' "$$TOKEN" | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | sed -n 's/.*"account":"\([^"]*\)".*/\1/p')
           case "$$ACCOUNT" in
-            ""|email:*)
-              echo "attempt $$i: aibot socialId not yet registered (account='$$ACCOUNT'); retrying in 5s..."
-              sleep 5
-              ;;
-            *)
+            [0-9a-f]*-[0-9a-f]*-*)
               printf '%s' "$$TOKEN" > /shared/platform_token
               echo "Wrote /shared/platform_token (account=$$ACCOUNT)"
               exit 0
+              ;;
+            *)
+              echo "attempt $$i: aibot socialId not yet registered; retrying in 5s..."
+              sleep 5
               ;;
           esac
         done
