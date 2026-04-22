@@ -252,9 +252,9 @@ services:
       - PASSWORD=${AIBOT_PASSWORD}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - OPENAI_BASE_URL=${OPENAI_BASE_URL}
-      - AI_OPENAI_MODEL=openai/gpt-4o-mini
-      - AI_OPENAI_TRANSLATE_MODEL=openai/gpt-4o-mini
-      - AI_OPENAI_SUMMARY_MODEL=openai/gpt-4o-mini
+      - AI_OPENAI_MODEL=${AI_OPENAI_MODEL}
+      - AI_OPENAI_TRANSLATE_MODEL=${AI_OPENAI_TRANSLATE_MODEL}
+      - AI_OPENAI_SUMMARY_MODEL=${AI_OPENAI_SUMMARY_MODEL}
       - LOVE_ENDPOINT=http://love:8096
     restart: unless-stopped
     networks:
