@@ -8,6 +8,9 @@ services:
     volumes:
       - ./.huly.nginx:/etc/nginx/conf.d/default.conf
       - /home/ubuntu/certs:/etc/nginx/certs:ro
+      # Persist access log so it survives `docker compose restart nginx`.
+      # stdout/docker-logs also still works via the image's default access_log.
+      - nginx_logs:/var/log/nginx/persistent
     restart: unless-stopped
     networks:
       - huly_net
@@ -439,6 +442,8 @@ volumes:
   # tmpfs-style handoff for the forged PLATFORM_TOKEN that love-agent-init
   # writes and love-agent reads. Cleared per `docker compose down -v`.
   platform_token:
+  # Persistent nginx access log so repro'd failures survive nginx restart.
+  nginx_logs:
 
 networks:
   huly_net:

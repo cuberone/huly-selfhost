@@ -3,6 +3,14 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
+# Detailed log format for diagnosing LiveKit Cloud Egress uploads. Captures
+# Host, signed Authorization prefix (AWS access key id), and CF-Connecting-IP
+# so we can correlate a failed PUT with LiveKit's sign-time values.
+log_format recordings '$time_iso8601 $remote_addr cf=$http_cf_connecting_ip '
+                     '"$request" $status body=$request_length '
+                     'host="$host" auth="$http_authorization" '
+                     'ua="$http_user_agent"';
+
 # Cloudflare proxies all traffic, so $remote_addr is a CF edge IP. Trust these
 # CF ranges and take the true client IP from CF-Connecting-IP so per-location
 # allow/deny rules see the real source.
@@ -167,6 +175,11 @@ server {
     # so only LiveKit Cloud source IPs get through. If recordings start 403'ing
     # after LiveKit rotates egress IPs, extend the allow list.
     location /huly-recordings/ {
+        # Persistent log so failures survive an nginx restart; default stdout
+        # log still fires at the http{} level.
+        access_log /var/log/nginx/persistent/recordings.log recordings;
+        access_log /var/log/nginx/access.log;
+
         allow 143.223.88.0/21;
         allow 161.115.160.0/19;
         deny all;
