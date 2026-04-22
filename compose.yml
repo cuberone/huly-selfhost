@@ -169,25 +169,45 @@ services:
   # Huly's UI renders transcripts only when they arrive as ChatMessages on the
   # meeting minutes doc, which only happens when the upstream love-agent worker
   # POSTs them to aibot's /love/transcript. That endpoint requires a JWT with
-  # `account` == aibot's personUuid (assigned on first signup). This init step
-  # forges the token and writes it to a shared volume; love-agent reads it via
-  # its `command:` override. See love-agent-init/generate-token.sh for details.
+  # `account` == aibot's personUuid (assigned on first signup).
+  #
+  # The `hardcoreeng/tool` image ships a `generate-token` subcommand that does
+  # the socialId lookup and mints the token via the official
+  # @hcengineering/server-token library. We retry because aibot registers its
+  # social id asynchronously on first boot — the tool falls back to the literal
+  # `email:huly.ai.bot@hc.engineering` string until that row lands.
   love-agent-init:
-    image: alpine:3.19
+    image: hardcoreeng/tool:${HULY_VERSION}
     depends_on:
       - account
       - aibot
     environment:
-      - SECRET=${SECRET}
+      - SERVER_SECRET=${SECRET}
       - ACCOUNTS_URL=http://account:3000
-    entrypoint: /bin/sh
+      - ACCOUNT_DB_URL=${CR_DB_URL}
+    entrypoint: ["/bin/sh", "-c"]
     command:
-      - -c
       - |
-        apk add --no-cache --quiet curl openssl && \
-        /init/generate-token.sh
+        i=0
+        while [ $$i -lt 60 ]; do
+          i=$$((i + 1))
+          TOKEN=$$(node /usr/src/app/bundle.js generate-token email:huly.ai.bot@hc.engineering '' 2>/dev/null || true)
+          ACCOUNT=$$(printf '%s' "$$TOKEN" | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | sed -n 's/.*"account":"\([^"]*\)".*/\1/p')
+          case "$$ACCOUNT" in
+            ""|email:*)
+              echo "attempt $$i: aibot socialId not yet registered (account='$$ACCOUNT'); retrying in 5s..."
+              sleep 5
+              ;;
+            *)
+              printf '%s' "$$TOKEN" > /shared/platform_token
+              echo "Wrote /shared/platform_token (account=$$ACCOUNT)"
+              exit 0
+              ;;
+          esac
+        done
+        echo "ERROR: failed to resolve aibot personUuid after $$i attempts" >&2
+        exit 1
     volumes:
-      - ./love-agent-init:/init:ro
       - platform_token:/shared
     restart: "no"
     networks:
