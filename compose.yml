@@ -193,7 +193,7 @@ services:
         i=0
         while [ $$i -lt 60 ]; do
           i=$$((i + 1))
-          TOKEN=$$(node /usr/src/app/bundle.js generate-token huly.ai.bot@hc.engineering '' 2>/dev/null || true)
+          TOKEN=$$(node /usr/src/app/bundle.js generate-token huly.ai.bot@hc.engineering '' 2>/tmp/err || true)
           ACCOUNT=$$(printf '%s' "$$TOKEN" | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | sed -n 's/.*"account":"\([^"]*\)".*/\1/p')
           case "$$ACCOUNT" in
             [0-9a-f]*-[0-9a-f]*-*)
@@ -202,7 +202,8 @@ services:
               exit 0
               ;;
             *)
-              echo "attempt $$i: aibot socialId not yet registered; retrying in 5s..."
+              echo "attempt $$i: no token yet; tool stderr:"
+              head -5 /tmp/err | sed 's/^/  /'
               sleep 5
               ;;
           esac
