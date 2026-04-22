@@ -132,6 +132,31 @@ server {
         proxy_pass http://stats:4900/;
     }
 
+    # Public-facing MinIO endpoint for LiveKit Cloud Egress recording uploads.
+    # Firewalled to LiveKit's documented static CIDRs. These cover realtime/SIP
+    # today; Egress is not documented to use them but empirically tends to.
+    # If recordings start 403'ing, check access log and extend allow list.
+    location /_minio/ {
+        allow 143.223.88.0/21;
+        allow 161.115.160.0/19;
+        deny all;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Strip the /_minio prefix before forwarding to MinIO.
+        rewrite ^/_minio/(.*)$ /$1 break;
+        proxy_pass http://minio:9000;
+
+        # Recordings can be large; don't cap body size and don't buffer uploads.
+        client_max_body_size 10G;
+        proxy_request_buffering off;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+
     location /_pulse {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

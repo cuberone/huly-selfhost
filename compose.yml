@@ -134,11 +134,43 @@ services:
       - SECRET=${SECRET}
       - ACCOUNTS_URL=http://account:3000
       - DB_URL=${CR_DB_URL}
-      - STORAGE_CONFIG=minio|minio?accessKey=minioadmin&secretKey=minioadmin
-      - STORAGE_PROVIDER_NAME=minio
+      # s3 kind satisfies checkRecordAvailable; endpoint is the nginx-fronted MinIO
+      # URL that LiveKit Cloud Egress can reach (firewalled to LiveKit CIDRs).
+      - STORAGE_CONFIG=s3|${LIVEKIT_RECORD_ENDPOINT}?accessKey=minioadmin&secretKey=minioadmin&region=us-east-2
+      - STORAGE_PROVIDER_NAME=s3
+      - S3_BUCKET_NAME=${LIVEKIT_RECORD_BUCKET}
       - LIVEKIT_HOST=${LIVEKIT_HOST}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+    restart: unless-stopped
+    networks:
+      - huly_net
+
+  minio-init:
+    image: minio/mc
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        mc alias set local http://minio:9000 minioadmin minioadmin && \
+        mc mb --ignore-existing local/${LIVEKIT_RECORD_BUCKET} && \
+        echo "recording bucket ready: ${LIVEKIT_RECORD_BUCKET}"
+    restart: "no"
+    networks:
+      - huly_net
+
+  transcription-agent:
+    build: ./transcription-agent
+    depends_on:
+      - love
+    environment:
+      - LIVEKIT_URL=${LIVEKIT_HOST}
+      - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
+      - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
     restart: unless-stopped
     networks:
       - huly_net
