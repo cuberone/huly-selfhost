@@ -3,14 +3,6 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
-# Detailed log format for diagnosing LiveKit Cloud Egress uploads. Captures
-# Host, signed Authorization prefix (AWS access key id), and CF-Connecting-IP
-# so we can correlate a failed PUT with LiveKit's sign-time values.
-log_format recordings '$time_iso8601 $remote_addr cf=$http_cf_connecting_ip '
-                     '"$request" $status body=$request_length '
-                     'host="$host" ae="$http_accept_encoding" '
-                     'auth="$http_authorization" ua="$http_user_agent"';
-
 # Cloudflare proxies all traffic, so $remote_addr is a CF edge IP. Trust these
 # CF ranges and take the true client IP from CF-Connecting-IP so per-location
 # allow/deny rules see the real source.
@@ -167,45 +159,6 @@ server {
         proxy_pass http://stats:4900/;
     }
 
-    # LiveKit Cloud Egress uploads recordings directly to MinIO path-style at
-    # /<bucket>/<workspace>/<file>.mp4 on the public host. Love's parser strips
-    # URL paths from the STORAGE_CONFIG endpoint, so we can't hide this behind
-    # a /_minio/ prefix — the bucket name IS the path segment.
-    # Allowlist runs against CF-Connecting-IP (see set_real_ip_from above),
-    # so only LiveKit Cloud source IPs get through. If recordings start 403'ing
-    # after LiveKit rotates egress IPs, extend the allow list.
-    location /huly-recordings/ {
-        # Persistent log so failures survive an nginx restart; default stdout
-        # log still fires at the http{} level.
-        access_log /var/log/nginx/persistent/recordings.log recordings;
-        access_log /var/log/nginx/access.log;
-
-        allow 143.223.88.0/21;
-        allow 161.115.160.0/19;
-        deny all;
-
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-
-        # Cloudflare rewrites Accept-Encoding on incoming requests, which breaks
-        # AWS v4 signatures that include `accept-encoding` in SignedHeaders —
-        # aws-sdk-go-v2 (what LiveKit Cloud Egress uses) signs `identity` for
-        # S3 PUT/POST. Restore it here so MinIO's canonical-request hash matches
-        # what LiveKit signed.
-        proxy_set_header Accept-Encoding "identity";
-
-        # Path-style S3 requires the bucket name in the path, so we forward as-is.
-        proxy_pass http://minio:9000;
-
-        # Recordings can be large; don't cap body size and don't buffer uploads.
-        client_max_body_size 10G;
-        proxy_request_buffering off;
-        proxy_read_timeout 600s;
-        proxy_send_timeout 600s;
-    }
-
     location /_pulse {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -251,31 +204,4 @@ server {
     #    rewrite ^/_export(/.*)$ $1 break;
     #    proxy_pass http://exports:4009/;
     #}
-}
-
-# Virtual-hosted S3 access for love's internal HEAD/GET calls. Only reachable
-# from inside huly_net via the Docker DNS alias on the nginx service — there's
-# no public DNS for this subdomain, so no allowlist needed. Forwards Host
-# unchanged so MinIO (with MINIO_DOMAIN set) parses the subdomain as the bucket
-# and the AWS v4 signature still verifies.
-#
-# Prefix-wildcard server_name matches `<bucket>.<anything>` without this file
-# needing to encode the deployment's host or bucket name — both come from env.
-server {
-    listen 443 ssl;
-    server_name huly-recordings.*;
-
-    ssl_certificate /etc/nginx/certs/selfsigned.crt;
-    ssl_certificate_key /etc/nginx/certs/selfsigned.key;
-
-    location / {
-        proxy_set_header Host $host;
-        proxy_set_header Accept-Encoding "identity";
-        proxy_pass http://minio:9000;
-
-        client_max_body_size 10G;
-        proxy_request_buffering off;
-        proxy_read_timeout 600s;
-        proxy_send_timeout 600s;
-    }
 }
