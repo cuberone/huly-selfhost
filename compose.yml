@@ -13,7 +13,14 @@ services:
       - nginx_logs:/var/log/nginx/persistent
     restart: unless-stopped
     networks:
-      - huly_net
+      huly_net:
+        # Love's S3 adapter builds virtual-hosted URLs for HeadObject on the
+        # recordings bucket: https://<bucket>.<HOST_ADDRESS>/<key>. Docker's
+        # embedded DNS resolves this alias to the nginx container so the call
+        # stays inside huly_net; nginx forwards to MinIO unchanged, and MinIO
+        # (with MINIO_DOMAIN set) interprets the subdomain as the bucket.
+        aliases:
+          - ${LIVEKIT_RECORD_BUCKET}.${HOST_ADDRESS}
 
   cockroach:
     image: cockroachdb/cockroach:latest-v24.2
@@ -66,6 +73,11 @@ services:
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}
+      # Enable virtual-hosted-style S3 requests. Love's AWS SDK (no
+      # forcePathStyle support in its S3Config) sends HEAD/GET as
+      # https://<bucket>.<HOST_ADDRESS>/<key>; MinIO parses the subdomain as
+      # the bucket name when MINIO_DOMAIN is set. Path-style still works too.
+      - MINIO_DOMAIN=${HOST_ADDRESS}
     healthcheck:
       test: ['CMD', 'mc', 'ready', 'local']
       interval: 5s
@@ -146,6 +158,11 @@ services:
       # dedicated location block allowlisted to LiveKit Cloud source IPs.
       - STORAGE_CONFIG=s3|${LIVEKIT_RECORD_ENDPOINT}?accessKey=${MINIO_ROOT_USER}&secretKey=${MINIO_ROOT_PASSWORD}&region=us-east-2&rootBucket=${LIVEKIT_RECORD_BUCKET}
       - STORAGE_PROVIDER_NAME=s3
+      # Love's post-webhook HEAD lands on https://<bucket>.<HOST_ADDRESS>
+      # (Docker DNS alias → nginx → MinIO). The nginx TLS cert is self-signed;
+      # this node flag tells love's AWS SDK to accept it. Scope is limited to
+      # the love container.
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
       - LIVEKIT_HOST=${LIVEKIT_HOST}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}

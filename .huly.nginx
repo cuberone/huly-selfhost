@@ -167,10 +167,10 @@ server {
         proxy_pass http://stats:4900/;
     }
 
-    # LiveKit Cloud Egress uploads recordings directly to the MinIO path-style
-    # URL: https://ws.ergomorph.com/huly-recordings/<workspace>/<file>.mp4.
-    # Love's parser strips URL paths from STORAGE_CONFIG endpoint, so we can't
-    # hide this behind a /_minio/ prefix — the bucket name IS the path segment.
+    # LiveKit Cloud Egress uploads recordings directly to MinIO path-style at
+    # /<bucket>/<workspace>/<file>.mp4 on the public host. Love's parser strips
+    # URL paths from the STORAGE_CONFIG endpoint, so we can't hide this behind
+    # a /_minio/ prefix — the bucket name IS the path segment.
     # Allowlist runs against CF-Connecting-IP (see set_real_ip_from above),
     # so only LiveKit Cloud source IPs get through. If recordings start 403'ing
     # after LiveKit rotates egress IPs, extend the allow list.
@@ -251,4 +251,31 @@ server {
     #    rewrite ^/_export(/.*)$ $1 break;
     #    proxy_pass http://exports:4009/;
     #}
+}
+
+# Virtual-hosted S3 access for love's internal HEAD/GET calls. Only reachable
+# from inside huly_net via the Docker DNS alias on the nginx service — there's
+# no public DNS for this subdomain, so no allowlist needed. Forwards Host
+# unchanged so MinIO (with MINIO_DOMAIN set) parses the subdomain as the bucket
+# and the AWS v4 signature still verifies.
+#
+# Prefix-wildcard server_name matches `<bucket>.<anything>` without this file
+# needing to encode the deployment's host or bucket name — both come from env.
+server {
+    listen 443 ssl;
+    server_name huly-recordings.*;
+
+    ssl_certificate /etc/nginx/certs/selfsigned.crt;
+    ssl_certificate_key /etc/nginx/certs/selfsigned.key;
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header Accept-Encoding "identity";
+        proxy_pass http://minio:9000;
+
+        client_max_body_size 10G;
+        proxy_request_buffering off;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
 }
