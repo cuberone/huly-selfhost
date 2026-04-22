@@ -193,7 +193,10 @@ services:
         i=0
         while [ $$i -lt 60 ]; do
           i=$$((i + 1))
-          TOKEN=$$(node /usr/src/app/bundle.js generate-token huly.ai.bot@hc.engineering '' 2>/tmp/err || true)
+          # Workspace arg is required by the CLI and must pass UUID validation
+          # in generateToken. aibot's /love/transcript only checks the `account`
+          # claim, so the nil UUID is safe as a placeholder.
+          TOKEN=$$(node /usr/src/app/bundle.js generate-token huly.ai.bot@hc.engineering 00000000-0000-0000-0000-000000000000 2>/tmp/err || true)
           ACCOUNT=$$(printf '%s' "$$TOKEN" | cut -d. -f2 | tr '_-' '/+' | base64 -d 2>/dev/null | sed -n 's/.*"account":"\([^"]*\)".*/\1/p')
           case "$$ACCOUNT" in
             [0-9a-f]*-[0-9a-f]*-*)
