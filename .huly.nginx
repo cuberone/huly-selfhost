@@ -8,8 +8,8 @@ map $http_upgrade $connection_upgrade {
 # so we can correlate a failed PUT with LiveKit's sign-time values.
 log_format recordings '$time_iso8601 $remote_addr cf=$http_cf_connecting_ip '
                      '"$request" $status body=$request_length '
-                     'host="$host" auth="$http_authorization" '
-                     'ua="$http_user_agent"';
+                     'host="$host" ae="$http_accept_encoding" '
+                     'auth="$http_authorization" ua="$http_user_agent"';
 
 # Cloudflare proxies all traffic, so $remote_addr is a CF edge IP. Trust these
 # CF ranges and take the true client IP from CF-Connecting-IP so per-location
@@ -188,6 +188,13 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Cloudflare rewrites Accept-Encoding on incoming requests, which breaks
+        # AWS v4 signatures that include `accept-encoding` in SignedHeaders —
+        # aws-sdk-go-v2 (what LiveKit Cloud Egress uses) signs `identity` for
+        # S3 PUT/POST. Restore it here so MinIO's canonical-request hash matches
+        # what LiveKit signed.
+        proxy_set_header Accept-Encoding "identity";
 
         # Path-style S3 requires the bucket name in the path, so we forward as-is.
         proxy_pass http://minio:9000;
