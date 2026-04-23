@@ -335,6 +335,13 @@ services:
       - ACCOUNT_PORT=3000
       - QUEUE_CONFIG=redpanda:9092
       - MAIL_URL=http://mail:8097
+      # Optional OIDC provider — populated when the `logto` profile is up.
+      # Huly only registers the provider when all three of CLIENT_ID,
+      # CLIENT_SECRET, ISSUER are non-empty (pods/authProviders/src/openid.ts:41).
+      - OPENID_CLIENT_ID=${OPENID_CLIENT_ID:-}
+      - OPENID_CLIENT_SECRET=${OPENID_CLIENT_SECRET:-}
+      - OPENID_ISSUER=${OPENID_ISSUER:-}
+      - OPENID_DISPLAY_NAME=${OPENID_DISPLAY_NAME:-}
     restart: unless-stopped
     networks:
       - huly_net
@@ -436,7 +443,46 @@ services:
     restart: unless-stopped
     networks:
       - huly_net
-      
+
+  # --- Logto IdP (optional; enable with `--profile logto`) ---
+
+  logto-db:
+    image: postgres:14-alpine
+    profiles: [logto]
+    environment:
+      - POSTGRES_USER=${LOGTO_DB_USER:-logto}
+      - POSTGRES_PASSWORD=${LOGTO_DB_PASSWORD}
+      - POSTGRES_DB=${LOGTO_DB_NAME:-logto}
+    volumes:
+      - ${VOLUME_LOGTO_DB_PATH:-logto_db}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${LOGTO_DB_USER:-logto}"]
+      interval: 10s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - huly_net
+
+  logto:
+    image: svhd/logto:${LOGTO_VERSION:-1.23.0}
+    profiles: [logto]
+    depends_on:
+      logto-db:
+        condition: service_healthy
+    # `npm run cli db seed --swe` is idempotent: seeds an empty DB, no-ops
+    # on an already-seeded one. `--swe` seeds the Sign-in Experience defaults.
+    entrypoint: ["sh", "-c", "npm run cli db seed -- --swe && npm start"]
+    environment:
+      - TRUST_PROXY_HEADER=1
+      - DB_URL=postgres://${LOGTO_DB_USER:-logto}:${LOGTO_DB_PASSWORD}@logto-db:5432/${LOGTO_DB_NAME:-logto}
+      - ENDPOINT=https://auth.${HOST_ADDRESS}
+      - ADMIN_ENDPOINT=https://auth.${HOST_ADDRESS}/admin
+      - PORT=3001
+      - ADMIN_PORT=3002
+    restart: unless-stopped
+    networks:
+      - huly_net
+
 volumes:
   # These named volumes are used when custom volume paths are not specified
   # If VOLUME_*_PATH variables are set, these volumes will be ignored
@@ -449,6 +495,7 @@ volumes:
   # tmpfs-style handoff for the forged PLATFORM_TOKEN that love-agent-init
   # writes and love-agent reads. Cleared per `docker compose down -v`.
   platform_token:
+  logto_db:
 
 networks:
   huly_net:
