@@ -484,9 +484,12 @@ services:
     #   open http://localhost:3002 in a browser
     ports:
       - "127.0.0.1:3002:3002"
-    # `npm run cli db seed --swe` is idempotent: seeds an empty DB, no-ops
-    # on an already-seeded one. `--swe` seeds the Sign-in Experience defaults.
-    entrypoint: ["sh", "-c", "npm run cli db seed -- --swe && npm start"]
+    # On start: (1) apply any pending schema migrations (no-op after first
+    # deploy of a given image version, required when bumping LOGTO_VERSION);
+    # (2) seed sign-in experience defaults (idempotent on seeded DB); (3) start.
+    # Skipping `alteration deploy` leaves 1.38+ crash-looping with
+    # "Undeployed database alterations found" after an image bump.
+    entrypoint: ["sh", "-c", "npm run alteration deploy latest && npm run cli db seed -- --swe && npm start"]
     environment:
       - TRUST_PROXY_HEADER=1
       - DB_URL=postgres://${LOGTO_DB_USER:-logto}:${LOGTO_DB_PASSWORD}@logto-db:5432/${LOGTO_DB_NAME:-logto}
