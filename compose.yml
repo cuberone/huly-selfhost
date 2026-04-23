@@ -253,6 +253,22 @@ services:
     networks:
       - huly_net
 
+  # Sends signup confirmation and notification emails via Resend's SMTP relay.
+  # Resend SMTP wants the literal username "resend" and the API key as the
+  # password — there is no separate SMTP credential.
+  mail:
+    image: hardcoreeng/mail:${HULY_VERSION}
+    environment:
+      - PORT=8097
+      - SOURCE=${MAIL_SOURCE}
+      - SMTP_HOST=smtp.resend.com
+      - SMTP_PORT=587
+      - SMTP_USERNAME=resend
+      - SMTP_PASSWORD=${RESEND_API_KEY}
+    restart: unless-stopped
+    networks:
+      - huly_net
+
   rekoni:
     image: hardcoreeng/rekoni-service:${HULY_VERSION}
     environment:
@@ -283,6 +299,7 @@ services:
       - QUEUE_CONFIG=redpanda:9092
       - PULSE_URL=http://hulypulse:8099
       - AI_BOT_URL=http://aibot:4010
+      - MAIL_URL=http://mail:8097
     restart: unless-stopped
     networks:
       - huly_net
@@ -317,6 +334,7 @@ services:
       - ACCOUNTS_URL=http${SECURE:+s}://${HOST_ADDRESS}/_accounts
       - ACCOUNT_PORT=3000
       - QUEUE_CONFIG=redpanda:9092
+      - MAIL_URL=http://mail:8097
     restart: unless-stopped
     networks:
       - huly_net
