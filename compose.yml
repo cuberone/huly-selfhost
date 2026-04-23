@@ -475,8 +475,12 @@ services:
     environment:
       - TRUST_PROXY_HEADER=1
       - DB_URL=postgres://${LOGTO_DB_USER:-logto}:${LOGTO_DB_PASSWORD}@logto-db:5432/${LOGTO_DB_NAME:-logto}
-      - ENDPOINT=https://auth.${HOST_ADDRESS}
-      - ADMIN_ENDPOINT=https://auth.${HOST_ADDRESS}/admin
+      # LOGTO_HOSTNAME is the public hostname of the Logto IdP (e.g. auth.example.com).
+      # Set explicitly because Huly's HOST_ADDRESS is a full hostname (ws.example.com),
+      # so `auth.${HOST_ADDRESS}` would become auth.ws.example.com — a 4-level subdomain
+      # that the operator isn't running.
+      - ENDPOINT=https://${LOGTO_HOSTNAME}
+      - ADMIN_ENDPOINT=https://${LOGTO_HOSTNAME}/admin
       - PORT=3001
       - ADMIN_PORT=3002
     restart: unless-stopped
