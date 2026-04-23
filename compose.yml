@@ -305,6 +305,7 @@ services:
       redpanda:
         condition: service_healthy
     environment:
+      - DISABLE_SIGNUP=${DISABLE_SIGNUP:-}
       - SERVER_PORT=3000
       - SERVER_SECRET=${SECRET}
       - DB_URL=${CR_DB_URL}
@@ -343,6 +344,7 @@ services:
   front:
     image: hardcoreeng/front:${HULY_VERSION}
     environment:
+      - DISABLE_SIGNUP=${DISABLE_SIGNUP:-}
       - SERVER_PORT=8080
       - SERVER_SECRET=${SECRET}
       - LOVE_ENDPOINT=http${SECURE:+s}://${HOST_ADDRESS}/_love
