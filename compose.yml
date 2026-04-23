@@ -1,7 +1,7 @@
 name: ${DOCKER_NAME}
 services:
   nginx:
-    image: "nginx:1.21.3"
+    image: "nginx:1.27-alpine"
     ports:
       - "${HTTP_BIND}:${HTTP_PORT}:80"
       - "443:443"
@@ -469,18 +469,25 @@ services:
     depends_on:
       logto-db:
         condition: service_healthy
+    # Admin console reached via SSH tunnel only (not nginx). Logto's admin SPA
+    # fetches assets from absolute `/assets/*` paths that don't work under a
+    # sub-path ADMIN_ENDPOINT; exposing admin through nginx would need its own
+    # subdomain. Bind 3002 to the host loopback so operators tunnel to it:
+    #   ssh -L 3002:localhost:3002 <user>@<host>
+    #   open http://localhost:3002 in a browser
+    ports:
+      - "127.0.0.1:3002:3002"
     # `npm run cli db seed --swe` is idempotent: seeds an empty DB, no-ops
     # on an already-seeded one. `--swe` seeds the Sign-in Experience defaults.
     entrypoint: ["sh", "-c", "npm run cli db seed -- --swe && npm start"]
     environment:
       - TRUST_PROXY_HEADER=1
       - DB_URL=postgres://${LOGTO_DB_USER:-logto}:${LOGTO_DB_PASSWORD}@logto-db:5432/${LOGTO_DB_NAME:-logto}
-      # LOGTO_HOSTNAME is the public hostname of the Logto IdP (e.g. auth.example.com).
-      # Set explicitly because Huly's HOST_ADDRESS is a full hostname (ws.example.com),
-      # so `auth.${HOST_ADDRESS}` would become auth.ws.example.com — a 4-level subdomain
-      # that the operator isn't running.
+      # LOGTO_HOSTNAME is the public OIDC hostname (e.g. auth.example.com). Set
+      # explicitly because Huly's HOST_ADDRESS is itself a full hostname
+      # (ws.example.com), so `auth.${HOST_ADDRESS}` would become auth.ws.example.com.
+      # ADMIN_ENDPOINT is intentionally unset — admin stays on localhost:3002.
       - ENDPOINT=https://${LOGTO_HOSTNAME}
-      - ADMIN_ENDPOINT=https://${LOGTO_HOSTNAME}/admin
       - PORT=3001
       - ADMIN_PORT=3002
     restart: unless-stopped
