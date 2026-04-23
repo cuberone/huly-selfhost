@@ -471,7 +471,7 @@ services:
       - huly_net
 
   logto:
-    image: svhd/logto:${LOGTO_VERSION:-1.23.0}
+    image: svhd/logto:${LOGTO_VERSION:-1.38.0}
     profiles: [logto]
     depends_on:
       logto-db:
