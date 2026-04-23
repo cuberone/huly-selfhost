@@ -342,6 +342,13 @@ services:
       - OPENID_CLIENT_SECRET=${OPENID_CLIENT_SECRET:-}
       - OPENID_ISSUER=${OPENID_ISSUER:-}
       - OPENID_DISPLAY_NAME=${OPENID_DISPLAY_NAME:-}
+      # Trust the self-signed nginx cert so Node's openid-client can reach
+      # the OIDC discovery endpoint at ${OPENID_ISSUER} over TLS.
+      # Without this the Issuer.discover() call fails with
+      # DEPTH_ZERO_SELF_SIGNED_CERT and the provider never registers.
+      - NODE_EXTRA_CA_CERTS=/etc/ssl/certs/huly-selfsigned.crt
+    volumes:
+      - /home/ubuntu/certs/selfsigned.crt:/etc/ssl/certs/huly-selfsigned.crt:ro
     restart: unless-stopped
     networks:
       - huly_net
