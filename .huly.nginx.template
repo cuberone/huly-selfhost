@@ -84,10 +84,12 @@ server {
     }
 
     # Logto is the sole auth path, so hide Huly's email/password login form by
-    # redirecting plain /login straight to the OIDC initiator. Exact-match
-    # directive: /login/join (invites) and /login/auth?token= (OIDC callback
-    # return) have longer paths and fall through to the SPA unchanged.
-    location = /login {
+    # redirecting the SPA's login entry points to the OIDC initiator. Regex
+    # matches bare /login and /login:<component>... (Huly SPA's colon-separated
+    # routes like /login:component:LoginApp). /login/auth?token= (OIDC
+    # callback) and /login/join/... (invites) use a slash and fall through
+    # to the SPA unchanged.
+    location ~ ^/login(:|$) {
         return 302 /_accounts/auth/openid;
     }
 
