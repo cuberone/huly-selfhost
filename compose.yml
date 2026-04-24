@@ -476,14 +476,6 @@ services:
     depends_on:
       logto-db:
         condition: service_healthy
-    # Admin console reached via SSH tunnel only (not nginx). Logto's admin SPA
-    # fetches assets from absolute `/assets/*` paths that don't work under a
-    # sub-path ADMIN_ENDPOINT; exposing admin through nginx would need its own
-    # subdomain. Bind 3002 to the host loopback so operators tunnel to it:
-    #   ssh -L 3002:localhost:3002 <user>@<host>
-    #   open http://localhost:3002 in a browser
-    ports:
-      - "127.0.0.1:3002:3002"
     # On start: (1) apply any pending schema migrations (no-op after first
     # deploy of a given image version, required when bumping LOGTO_VERSION);
     # (2) seed sign-in experience defaults (idempotent on seeded DB); (3) start.
@@ -493,11 +485,14 @@ services:
     environment:
       - TRUST_PROXY_HEADER=1
       - DB_URL=postgres://${LOGTO_DB_USER:-logto}:${LOGTO_DB_PASSWORD}@logto-db:5432/${LOGTO_DB_NAME:-logto}
-      # LOGTO_HOSTNAME is the public OIDC hostname (e.g. auth.example.com). Set
-      # explicitly because Huly's HOST_ADDRESS is itself a full hostname
-      # (ws.example.com), so `auth.${HOST_ADDRESS}` would become auth.ws.example.com.
-      # ADMIN_ENDPOINT is intentionally unset — admin stays on localhost:3002.
+      # LOGTO_HOSTNAME = public OIDC hostname (e.g. auth.example.com).
+      # LOGTO_ADMIN_HOSTNAME = public admin-console hostname (e.g. admin-auth.example.com).
+      # Both must be on their own subdomain because Logto's admin SPA fetches
+      # `/assets/*` from root, which collides with the OIDC endpoint's `/` when
+      # mounted at a sub-path. Neither can derive from Huly's HOST_ADDRESS since
+      # that is itself a full hostname (ws.example.com).
       - ENDPOINT=https://${LOGTO_HOSTNAME}
+      - ADMIN_ENDPOINT=https://${LOGTO_ADMIN_HOSTNAME}
       - PORT=3001
       - ADMIN_PORT=3002
     restart: unless-stopped

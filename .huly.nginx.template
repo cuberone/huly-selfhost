@@ -83,6 +83,14 @@ server {
         proxy_pass http://account:3000/providers;
     }
 
+    # Logto is the sole auth path, so hide Huly's email/password login form by
+    # redirecting plain /login straight to the OIDC initiator. Exact-match
+    # directive: /login/join (invites) and /login/auth?token= (OIDC callback
+    # return) have longer paths and fall through to the SPA unchanged.
+    location = /login {
+        return 302 /_accounts/auth/openid;
+    }
+
     #location /_print {
     #    proxy_set_header Host $host;
     #    proxy_set_header X-Real-IP $remote_addr;
@@ -227,7 +235,7 @@ server {
     #}
 }
 
-# --- Logto subdomain (optional; active when `logto` profile is running) ---
+# --- Logto subdomains (optional; active when `logto` profile is running) ---
 
 server {
     listen 443 ssl;
@@ -238,13 +246,30 @@ server {
     ssl_certificate_key /etc/nginx/certs/selfsigned.key;
 
     # Logto user-facing: /oidc/*, sign-in experience, /.well-known, non-admin /api.
-    # Admin console is NOT served here — it stays on logto:3002 reachable via
-    # SSH tunnel only (see compose.yml logto service comment).
     location / {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_pass http://logto:3001;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name admin-auth.<your-domain>;
+    client_max_body_size 4M;
+
+    ssl_certificate /etc/nginx/certs/selfsigned.crt;
+    ssl_certificate_key /etc/nginx/certs/selfsigned.key;
+
+    # Logto admin console. Separate subdomain so the admin SPA's absolute
+    # `/assets/*` paths resolve against logto:3002 (admin port), not logto:3001.
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_pass http://logto:3002;
     }
 }
