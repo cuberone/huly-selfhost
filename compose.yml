@@ -8,6 +8,13 @@ services:
     volumes:
       - ./.huly.nginx:/etc/nginx/conf.d/default.conf
       - /home/ubuntu/certs:/etc/nginx/certs:ro
+    # Healthcheck gates any dependent (e.g. account's OIDC discovery) until
+    # nginx is actually listening on :443, avoiding cold-start ECONNREFUSED.
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z 127.0.0.1 443']
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
     networks:
       - huly_net
@@ -318,9 +325,22 @@ services:
 
   account:
     image: hardcoreeng/account:${HULY_VERSION}
+    # OIDC discovery runs once at startup (pods/authProviders/src/openid.ts:43)
+    # with no retry. If the Logto endpoint isn't reachable at that moment, the
+    # "oidc" passport strategy is never registered and every sign-in throws
+    # "Unknown authentication strategy 'oidc'" until the container is bounced.
+    # Gating on `logto` healthy avoids the common race; `required: false`
+    # keeps the dep optional so deploys without the `logto` profile still
+    # start account normally. We intentionally do NOT gate on nginx: nginx
+    # resolves upstream names at config-load time, so adding nginx here
+    # creates a circular startup deadlock (nginx needs account resolvable,
+    # account waits on nginx healthy).
     depends_on:
       redpanda:
         condition: service_healthy
+      logto:
+        condition: service_healthy
+        required: false
     environment:
       - DISABLE_SIGNUP=${DISABLE_SIGNUP:-}
       - SERVER_PORT=3000
@@ -377,6 +397,7 @@ services:
     image: hardcoreeng/front:${HULY_VERSION}
     environment:
       - DISABLE_SIGNUP=${DISABLE_SIGNUP:-}
+      - HIDE_LOCAL_LOGIN=${HIDE_LOCAL_LOGIN:-}
       - SERVER_PORT=8080
       - SERVER_SECRET=${SECRET}
       - LOVE_ENDPOINT=http${SECURE:+s}://${HOST_ADDRESS}/_love
@@ -503,6 +524,18 @@ services:
       - NODE_EXTRA_CA_CERTS=/etc/ssl/certs/huly-selfsigned.crt
     volumes:
       - /home/ubuntu/certs/selfsigned.crt:/etc/ssl/certs/huly-selfsigned.crt:ro
+    # Gates account's OIDC discovery (which fetches /oidc/.well-known/... via
+    # nginx) until Logto has finished alteration-deploy + db-seed and is
+    # actually serving the discovery endpoint. Uses node (image has it) to
+    # avoid depending on curl/wget being installed.
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "node -e \"require('http').get('http://127.0.0.1:3001/oidc/.well-known/openid-configuration',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
     restart: unless-stopped
     networks:
       - huly_net
