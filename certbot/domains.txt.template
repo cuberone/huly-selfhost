@@ -1,0 +1,20 @@
+# One public hostname per line. Single source of truth for the SAN list on
+# the Let's Encrypt cert. Must stay in sync with the `server_name` entries
+# in .huly.nginx — this file feeds ./issue_certs.sh.
+#
+# This file (domains.txt.template) is committed with RFC 2606 (example.com)
+# placeholders. The live file `certbot/domains.txt` is gitignored.
+#
+# First-time setup:
+#   cp certbot/domains.txt.template certbot/domains.txt
+#   $EDITOR certbot/domains.txt          # replace placeholders with your hostnames
+#   scp certbot/domains.txt ubuntu@<host>:/home/ubuntu/huly-selfhost/certbot/
+#
+# Add a hostname later: append line → scp to server → ./issue_certs.sh
+# (uses --expand, safely grows the existing cert).
+#
+# Lines starting with `#` and blank lines are ignored.
+
+ws.example.com
+auth.example.com
+admin-auth.example.com

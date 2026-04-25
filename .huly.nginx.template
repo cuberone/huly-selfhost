@@ -33,7 +33,19 @@ real_ip_header CF-Connecting-IP;
 server {
     listen 80;
     server_name _;
-    return 301 https://$host$request_uri;
+
+    # ACME HTTP-01 challenge. Served from a shared volume (certbot_www) that
+    # the `certbot` compose service writes into during issuance/renewal.
+    # Kept above the catch-all redirect so the challenge path returns 200
+    # plaintext, not a 301 to HTTPS (LE's validator does not follow).
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+        default_type "text/plain";
+    }
+
+    location / {
+        return 301 https://$host$request_uri;
+    }
 }
 
 server {
@@ -41,8 +53,8 @@ server {
     server_name _;
     client_max_body_size 100M;
 
-    ssl_certificate /etc/nginx/certs/selfsigned.crt;
-    ssl_certificate_key /etc/nginx/certs/selfsigned.key;
+    ssl_certificate /etc/letsencrypt/live/huly/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/huly/privkey.pem;
 
     location / {
         proxy_set_header Host $host;
@@ -241,11 +253,11 @@ server {
 
 server {
     listen 443 ssl;
-    server_name auth.<your-domain>;
+    server_name auth.example.com;
     client_max_body_size 4M;
 
-    ssl_certificate /etc/nginx/certs/selfsigned.crt;
-    ssl_certificate_key /etc/nginx/certs/selfsigned.key;
+    ssl_certificate /etc/letsencrypt/live/huly/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/huly/privkey.pem;
 
     # Logto user-facing: /oidc/*, sign-in experience, /.well-known, non-admin /api.
     location / {
@@ -259,11 +271,11 @@ server {
 
 server {
     listen 443 ssl;
-    server_name admin-auth.<your-domain>;
+    server_name admin-auth.example.com;
     client_max_body_size 4M;
 
-    ssl_certificate /etc/nginx/certs/selfsigned.crt;
-    ssl_certificate_key /etc/nginx/certs/selfsigned.key;
+    ssl_certificate /etc/letsencrypt/live/huly/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/huly/privkey.pem;
 
     # Logto admin console. Separate subdomain so the admin SPA's absolute
     # `/assets/*` paths resolve against logto:3002 (admin port), not logto:3001.

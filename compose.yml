@@ -7,7 +7,14 @@ services:
       - "443:443"
     volumes:
       - ./.huly.nginx:/etc/nginx/conf.d/default.conf
+      # Self-signed certs (break-glass only — superseded by letsencrypt_etc).
       - /home/ubuntu/certs:/etc/nginx/certs:ro
+      # ACME HTTP-01 webroot, written by the `certbot` service, served at
+      # /.well-known/acme-challenge/.
+      - certbot_www:/var/www/certbot:ro
+      # Real certs issued by `./issue_certs.sh`; renewed by `./renew_certs.sh`.
+      # Mounted RO — only certbot writes here.
+      - letsencrypt_etc:/etc/letsencrypt:ro
     # Healthcheck gates any dependent (e.g. account's OIDC discovery) until
     # nginx is actually listening on :443, avoiding cold-start ECONNREFUSED.
     healthcheck:
@@ -362,13 +369,6 @@ services:
       - OPENID_CLIENT_SECRET=${OPENID_CLIENT_SECRET:-}
       - OPENID_ISSUER=${OPENID_ISSUER:-}
       - OPENID_DISPLAY_NAME=${OPENID_DISPLAY_NAME:-}
-      # Trust the self-signed nginx cert so Node's openid-client can reach
-      # the OIDC discovery endpoint at ${OPENID_ISSUER} over TLS.
-      # Without this the Issuer.discover() call fails with
-      # DEPTH_ZERO_SELF_SIGNED_CERT and the provider never registers.
-      - NODE_EXTRA_CA_CERTS=/etc/ssl/certs/huly-selfsigned.crt
-    volumes:
-      - /home/ubuntu/certs/selfsigned.crt:/etc/ssl/certs/huly-selfsigned.crt:ro
     restart: unless-stopped
     networks:
       - huly_net
@@ -516,14 +516,6 @@ services:
       - ADMIN_ENDPOINT=https://${LOGTO_ADMIN_HOSTNAME}
       - PORT=3001
       - ADMIN_PORT=3002
-      # Admin-console API requests go through authMiddleware, which calls
-      # getAdminTenantTokenValidationSet() — a fetch() to ADMIN_ENDPOINT's
-      # JWKS over HTTPS. That URL is served by our nginx with a self-signed
-      # cert, so without this the fetch aborts with DEPTH_ZERO_SELF_SIGNED_CERT
-      # and every /api/* call on admin-auth.* returns 500.
-      - NODE_EXTRA_CA_CERTS=/etc/ssl/certs/huly-selfsigned.crt
-    volumes:
-      - /home/ubuntu/certs/selfsigned.crt:/etc/ssl/certs/huly-selfsigned.crt:ro
     # Gates account's OIDC discovery (which fetches /oidc/.well-known/... via
     # nginx) until Logto has finished alteration-deploy + db-seed and is
     # actually serving the discovery endpoint. Uses node (image has it) to
@@ -540,6 +532,25 @@ services:
     networks:
       - huly_net
 
+  # --- Let's Encrypt (on-demand; NOT started by default) ---
+  # Issuance:  ./issue_certs.sh        (first time, and when domains.txt changes)
+  # Renewal:   ./renew_certs.sh        (called from a host cron every 2 days)
+  # Portable: uses ACME HTTP-01 challenge via the `certbot_www` webroot shared
+  # with nginx. No DNS-provider plugin, no API credentials — moves to any
+  # registrar/DNS host unchanged.
+  certbot:
+    image: certbot/certbot:v2.11.0
+    profiles: [certbot]
+    volumes:
+      - letsencrypt_etc:/etc/letsencrypt
+      - letsencrypt_lib:/var/lib/letsencrypt
+      - certbot_www:/var/www/certbot
+    # Entrypoint is the default `certbot`; args are provided by the helper
+    # scripts (./issue_certs.sh, ./renew_certs.sh) via `docker compose run`.
+    restart: "no"
+    networks:
+      - huly_net
+
 volumes:
   # These named volumes are used when custom volume paths are not specified
   # If VOLUME_*_PATH variables are set, these volumes will be ignored
@@ -553,6 +564,15 @@ volumes:
   # writes and love-agent reads. Cleared per `docker compose down -v`.
   platform_token:
   logto_db:
+  # Let's Encrypt state. `letsencrypt_etc` holds live certs + renewal config
+  # (/etc/letsencrypt/live/<cert-name>/{fullchain,privkey}.pem). Mounted RO
+  # into nginx, RW into certbot. `letsencrypt_lib` is certbot's internal
+  # work area. `certbot_www` is the HTTP-01 webroot shared with nginx.
+  # `docker compose down -v` wipes these and forces a re-issue — same caveat
+  # as logto_db. See CLAUDE.md "TLS certs" for the issue/renew runbook.
+  letsencrypt_etc:
+  letsencrypt_lib:
+  certbot_www:
 
 networks:
   huly_net:
