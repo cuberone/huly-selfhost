@@ -22,7 +22,6 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -36,7 +35,6 @@ services:
     volumes:
       - ${VOLUME_CR_DATA_PATH:-cr_data}:/cockroach/cockroach-data
       - ${VOLUME_CR_CERTS_PATH:-cr_certs}:/cockroach/certs
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -65,7 +63,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -81,7 +78,6 @@ services:
       test: ['CMD', 'mc', 'ready', 'local']
       interval: 5s
       retries: 10
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -103,13 +99,11 @@ services:
       interval: 20s
       retries: 10
       test: curl -s http://localhost:9200/_cluster/health | grep -vq '"status":"red"'
-    restart: unless-stopped
     networks:
       - huly_net
 
   mongodb:
     image: mongo:7-jammy
-    restart: unless-stopped
     volumes:
       - ${VOLUME_MONGO_PATH:-mongodb}:/data/db
     networks:
@@ -119,7 +113,6 @@ services:
   redis:
     image: redis:7-alpine
     command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
-    restart: unless-stopped
     networks:
       - huly_net
     # Required by HulyPulse (push notifications / real-time updates)
@@ -138,7 +131,6 @@ services:
       resources:
         limits:
           memory: 512M
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -159,7 +151,6 @@ services:
       - LIVEKIT_HOST=${LIVEKIT_HOST}
       - LIVEKIT_API_KEY=${LIVEKIT_API_KEY}
       - LIVEKIT_API_SECRET=${LIVEKIT_API_SECRET}
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -204,7 +195,6 @@ services:
       - PLATFORM_URL=http://aibot:4010
     volumes:
       - platform_token:/shared:ro
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -228,7 +218,6 @@ services:
       - AI_OPENAI_TRANSLATE_MODEL=${AI_OPENAI_TRANSLATE_MODEL}
       - AI_OPENAI_SUMMARY_MODEL=${AI_OPENAI_SUMMARY_MODEL}
       - LOVE_ENDPOINT=http://love:8096
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -244,7 +233,6 @@ services:
       - SMTP_PORT=587
       - SMTP_USERNAME=resend
       - SMTP_PASSWORD=${RESEND_API_KEY}
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -256,7 +244,6 @@ services:
       resources:
         limits:
           memory: 500M
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -279,7 +266,6 @@ services:
       - PULSE_URL=http://hulypulse:8099
       - AI_BOT_URL=http://aibot:4010
       - MAIL_URL=http://mail:8097
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -291,24 +277,26 @@ services:
       - ACCOUNTS_URL=http://account:3000
       - STATS_URL=http://stats:4900
       - STORAGE_CONFIG=minio|minio?accessKey=minioadmin&secretKey=minioadmin
-    restart: unless-stopped
     networks:
       - huly_net
 
   account:
     image: hardcoreeng/account:${HULY_VERSION}
     # OIDC discovery runs once at startup (pods/authProviders/src/openid.ts:43)
-    # with no retry. If the Logto endpoint isn't reachable at that moment, the
-    # "oidc" passport strategy is never registered and every sign-in throws
-    # "Unknown authentication strategy 'oidc'" until the container is bounced.
-    # Gating on `logto` healthy avoids the common race; `required: false`
-    # keeps the dep optional so deploys without the `logto` profile still
-    # start account normally. We intentionally do NOT gate on nginx: nginx
-    # resolves upstream names at config-load time, so adding nginx here
-    # creates a circular startup deadlock (nginx needs account resolvable,
-    # account waits on nginx healthy).
+    # with no retry. If the Logto issuer URL isn't reachable at that moment,
+    # the "oidc" passport strategy is never registered and every sign-in
+    # throws "Unknown authentication strategy 'oidc'" until the container is
+    # bounced. The issuer URL goes through nginx + LE TLS + Logto, so we gate
+    # account on ALL THREE being ready: nginx healthy, logto healthy, redpanda
+    # healthy (kafka client). The nginx-cycle worry that previously kept this
+    # gate off (nginx → account at config-load) is resolved by `.huly.nginx`
+    # using `resolver 127.0.0.11` + variable `proxy_pass $up`, which defers
+    # upstream DNS to request time. `required: false` on the logto gate keeps
+    # the dep optional for deploys without the `logto` profile.
     depends_on:
       redpanda:
+        condition: service_healthy
+      nginx:
         condition: service_healthy
       logto:
         condition: service_healthy
@@ -334,7 +322,6 @@ services:
       - OPENID_CLIENT_SECRET=${OPENID_CLIENT_SECRET:-}
       - OPENID_ISSUER=${OPENID_ISSUER:-}
       - OPENID_DISPLAY_NAME=${OPENID_DISPLAY_NAME:-}
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -354,7 +341,6 @@ services:
       - QUEUE_CONFIG=redpanda:9092
       - ACCOUNTS_DB_URL=${CR_DB_URL}
       - INIT_REPO_DIR=/no-init-scripts
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -391,7 +377,6 @@ services:
       - PULSE_URL=http${SECURE:+s}://${HOST_ADDRESS}/_pulse
       - AI_URL=http${SECURE:+s}://${HOST_ADDRESS}/_aibot
       - LIVEKIT_WS=${LIVEKIT_HOST}
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -410,7 +395,6 @@ services:
       - ACCOUNTS_URL=http://account:3000
       - STATS_URL=http://stats:4900
       - QUEUE_CONFIG=redpanda:9092
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -419,7 +403,6 @@ services:
     environment:
       - PORT=4900
       - SERVER_SECRET=${SECRET}
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -433,7 +416,6 @@ services:
     environment:
       - HULY_DB_CONNECTION=${CR_DB_URL}
       - HULY_TOKEN_SECRET=${SECRET}
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -452,7 +434,6 @@ services:
       test: ["CMD", "pg_isready", "-U", "${LOGTO_DB_USER:-logto}"]
       interval: 10s
       retries: 10
-    restart: unless-stopped
     networks:
       - huly_net
 
@@ -493,7 +474,6 @@ services:
       timeout: 5s
       retries: 20
       start_period: 30s
-    restart: unless-stopped
     networks:
       - huly_net
 

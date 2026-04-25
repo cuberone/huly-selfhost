@@ -1,0 +1,43 @@
+# Huly stack lifecycle.
+#
+# Compose's `depends_on` with `condition: service_healthy` is only enforced
+# during `compose up`. The Docker daemon ignores it on its own restart-on-boot
+# path, bringing every container with `restart: unless-stopped` up in arbitrary
+# order. To get reliable cold-start ordering we (a) drop `restart: unless-stopped`
+# from compose.yml so the daemon doesn't auto-start anything, and (b) make this
+# unit the single entry point that runs `compose up -d`. Everything boots in
+# the right order, every time.
+#
+# Install:
+#   sudo cp systemd/huly.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable huly.service
+#   sudo systemctl start huly.service        # bring up immediately, no reboot
+#
+# Operate:
+#   sudo systemctl status huly.service       # active means `compose up` succeeded
+#   sudo systemctl restart huly.service      # graceful stop + up
+#   sudo systemctl stop huly.service         # `docker compose stop`
+
+[Unit]
+Description=Huly self-hosted stack (Docker Compose)
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ubuntu
+WorkingDirectory=/home/ubuntu/huly-selfhost
+# Cold start with `service_healthy` gates can take a few minutes (logto runs
+# DB migrations + seed before its healthcheck passes; account waits on nginx
+# healthy + logto healthy).
+TimeoutStartSec=600
+ExecStart=/usr/bin/docker compose -p huly -f compose.yml --env-file huly_v7.conf --profile logto up -d --remove-orphans
+# `stop` (not `down`) preserves the containers so a subsequent start is fast
+# and doesn't trigger volume reattach / network recreate.
+ExecStop=/usr/bin/docker compose -p huly -f compose.yml --profile logto stop
+
+[Install]
+WantedBy=multi-user.target
