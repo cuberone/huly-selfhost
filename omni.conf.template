@@ -18,9 +18,17 @@
 # Required: must change before first deploy
 # =============================================================================
 
-# Image pinning. Tags published from cuberone/omni-private; `latest` only
-# exists when a `v*` git tag is pushed.
-# https://github.com/cuberone/omni-private/pkgs/container/omni-private%2Fomni-web
+# Container image source. Combine registry + namespace; compose appends the
+# service name + version (e.g. ${OMNI_IMAGE_PREFIX}/omni-web:${OMNI_VERSION}).
+# Examples:
+#   GHCR private fork:    ghcr.io/<org>/<repo>
+#   Docker Hub:           docker.io/<org>
+#   Self-hosted registry: registry.example.com/<namespace>
+# For private GHCR namespaces, run `docker login ghcr.io` on the server once.
+OMNI_IMAGE_PREFIX=CHANGE_ME_image_registry_and_namespace
+
+# Image tag. `latest` only exists when a `v*` git tag is pushed and CI
+# completes successfully — otherwise pin to a real tag (e.g. v0.2.0).
 OMNI_VERSION=latest
 
 # Database password. Generate with: openssl rand -hex 16

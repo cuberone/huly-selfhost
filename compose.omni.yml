@@ -5,7 +5,8 @@
 #
 # Releases:  ./release.sh  (pulls + brings up both stacks)
 # Env:       /home/ubuntu/huly-selfhost/omni.conf  (gitignored, live values)
-# Images:    ghcr.io/cuberone/omni-private/...     (private — `docker login ghcr.io` once)
+# Images:    ${OMNI_IMAGE_PREFIX}/<service>:${OMNI_VERSION}  (registry+namespace
+#            from omni.conf; private GHCR namespaces require one-time `docker login`)
 #
 # Profile-gated connectors are enabled via ENABLED_CONNECTORS (comma-separated)
 # in omni.conf; COMPOSE_PROFILES picks them up automatically.
@@ -82,7 +83,7 @@ services:
   # immediately. To force a re-run (e.g. after manual schema surgery):
   #   docker compose -p omni rm -f migrator && docker compose -p omni ... up -d
   migrator:
-    image: ghcr.io/cuberone/omni-private/omni-migrator:${OMNI_VERSION:-latest}
+    image: ${OMNI_IMAGE_PREFIX:?OMNI_IMAGE_PREFIX must be set in omni.conf}/omni-migrator:${OMNI_VERSION:-latest}
     container_name: omni-migrator
     depends_on:
       postgres:
@@ -95,7 +96,7 @@ services:
     logging: *default-logging
 
   searcher:
-    image: ghcr.io/cuberone/omni-private/omni-searcher:${OMNI_VERSION:-latest}
+    image: ${OMNI_IMAGE_PREFIX:?OMNI_IMAGE_PREFIX must be set in omni.conf}/omni-searcher:${OMNI_VERSION:-latest}
     container_name: omni-searcher
     depends_on:
       postgres:
@@ -115,7 +116,7 @@ services:
     logging: *default-logging
 
   indexer:
-    image: ghcr.io/cuberone/omni-private/omni-indexer:${OMNI_VERSION:-latest}
+    image: ${OMNI_IMAGE_PREFIX:?OMNI_IMAGE_PREFIX must be set in omni.conf}/omni-indexer:${OMNI_VERSION:-latest}
     container_name: omni-indexer
     depends_on:
       postgres:
@@ -137,7 +138,7 @@ services:
     logging: *default-logging
 
   ai:
-    image: ghcr.io/cuberone/omni-private/omni-ai:${OMNI_VERSION:-latest}
+    image: ${OMNI_IMAGE_PREFIX:?OMNI_IMAGE_PREFIX must be set in omni.conf}/omni-ai:${OMNI_VERSION:-latest}
     container_name: omni-ai
     depends_on:
       postgres:
@@ -164,7 +165,7 @@ services:
     logging: *default-logging
 
   connector-manager:
-    image: ghcr.io/cuberone/omni-private/omni-connector-manager:${OMNI_VERSION:-latest}
+    image: ${OMNI_IMAGE_PREFIX:?OMNI_IMAGE_PREFIX must be set in omni.conf}/omni-connector-manager:${OMNI_VERSION:-latest}
     container_name: omni-connector-manager
     depends_on:
       postgres:
@@ -191,7 +192,7 @@ services:
   # every network the container joins, so nginx (on proxy_net) can resolve
   # `omni-web:3000` without an explicit `aliases:` block.
   web:
-    image: ghcr.io/cuberone/omni-private/omni-web:${OMNI_VERSION:-latest}
+    image: ${OMNI_IMAGE_PREFIX:?OMNI_IMAGE_PREFIX must be set in omni.conf}/omni-web:${OMNI_VERSION:-latest}
     container_name: omni-web
     depends_on:
       - searcher
@@ -220,7 +221,7 @@ services:
     logging: *default-logging
 
   web-connector:
-    image: ghcr.io/cuberone/omni-private/omni-web-connector:${OMNI_VERSION:-latest}
+    image: ${OMNI_IMAGE_PREFIX:?OMNI_IMAGE_PREFIX must be set in omni.conf}/omni-web-connector:${OMNI_VERSION:-latest}
     container_name: omni-web-connector
     profiles: [web]
     depends_on:

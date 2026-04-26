@@ -310,7 +310,7 @@ server {
     }
 }
 
-# --- Omni (cuberone fork). Stack lives in compose.omni.yml; see CLAUDE.md.
+# --- Omni stack (lives in compose.omni.yml; see CLAUDE.md).
 # omni-web is reachable on the shared `proxy_net` network. Whole site is
 # proxied as a single SPA + websocket upstream — no path splitting needed.
 server {
