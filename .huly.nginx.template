@@ -80,7 +80,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
 
         set $up http://account:3000;
-        rewrite ^/_accounts(/.*)$ $1 break;
+        rewrite ^/_accounts/?(.*)$ /$1 break;
         proxy_pass $up;
     }
 
@@ -140,7 +140,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         set $up http://aibot:4010;
-        rewrite ^/_aibot(/.*)$ $1 break;
+        rewrite ^/_aibot/?(.*)$ /$1 break;
         proxy_pass $up;
     }
 
@@ -154,7 +154,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         set $up http://love:8096;
-        rewrite ^/_love(/.*)$ $1 break;
+        rewrite ^/_love/?(.*)$ /$1 break;
         proxy_pass $up;
     }
 
@@ -168,7 +168,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         set $up http://collaborator:3078;
-        rewrite ^/_collaborator(/.*)$ $1 break;
+        rewrite ^/_collaborator/?(.*)$ /$1 break;
         proxy_pass $up;
     }
 
@@ -182,7 +182,7 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
         set $up http://transactor:3333;
-        rewrite ^/_transactor(/.*)$ $1 break;
+        rewrite ^/_transactor/?(.*)$ /$1 break;
         proxy_pass $up;
     }
 
@@ -206,7 +206,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
 
         set $up http://rekoni:4004;
-        rewrite ^/_rekoni(/.*)$ $1 break;
+        rewrite ^/_rekoni/?(.*)$ /$1 break;
         proxy_pass $up;
     }
 
@@ -217,7 +217,7 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
 
         set $up http://stats:4900;
-        rewrite ^/_stats(/.*)$ $1 break;
+        rewrite ^/_stats/?(.*)$ /$1 break;
         proxy_pass $up;
     }
 
