@@ -230,6 +230,10 @@ services:
     environment:
       <<: [*redis-config]
       PORT: 4004
+      # Required: the connector's own DNS name on omni_net so connector-manager
+      # can call back to it. Must match the compose service key (`web-connector`),
+      # which is the DNS alias automatically registered on the bridge network.
+      CONNECTOR_HOST_NAME: web-connector
       CONNECTOR_MANAGER_URL: ${CONNECTOR_MANAGER_URL}
       RUST_LOG: ${RUST_LOG:-info}
     networks:
