@@ -1,0 +1,96 @@
+# Omni env config. Live values live in `omni.conf` (gitignored, on the server
+# at /home/ubuntu/huly-selfhost/omni.conf).
+#
+# Layout: vars you MUST change are at the top. Structural vars (internal
+# addressing, connector list) come next. Tunables with sensible defaults
+# defined in compose.omni.yml are listed commented-out at the bottom —
+# uncomment to override.
+#
+# First-time setup on the server:
+#   cp omni.conf.template omni.conf
+#   $EDITOR omni.conf            # fill in CHANGE_ME values + APP_URL hostname
+#
+# Bumping the Omni version:
+#   $EDITOR omni.conf            # set OMNI_VERSION=v0.x.y (or `latest`)
+#   ./release.sh                 # from your laptop
+
+# =============================================================================
+# Required: must change before first deploy
+# =============================================================================
+
+# Image pinning. Tags published from cuberone/omni-private; `latest` only
+# exists when a `v*` git tag is pushed.
+# https://github.com/cuberone/omni-private/pkgs/container/omni-private%2Fomni-web
+OMNI_VERSION=latest
+
+# Database password. Generate with: openssl rand -hex 16
+DATABASE_PASSWORD=CHANGE_ME_long_random_string
+
+# Public app URL. Used for SvelteKit cookie domain, redirect URLs, and CSRF
+# (ORIGIN). Replace example.com with your real hostname.
+APP_URL=https://omni.example.com
+
+# Encryption keys for connector credentials in the DB. Read by web, indexer,
+# ai, and connector-manager — they must agree.
+# Generate with:
+#   ENCRYPTION_KEY:  openssl rand -hex 32
+#   ENCRYPTION_SALT: openssl rand -hex 8
+ENCRYPTION_KEY=CHANGE_ME_at_least_32_chars_random
+ENCRYPTION_SALT=CHANGE_ME_16chars
+
+# =============================================================================
+# Structural: change only if you know why
+# =============================================================================
+
+# Database (internal — postgres service on omni_net)
+DATABASE_HOST=postgres
+DATABASE_PORT=5432
+DATABASE_USERNAME=omni
+DATABASE_NAME=omni
+
+# Redis (internal)
+REDIS_URL=redis://redis:6379
+
+# Cross-service URLs. Internal listening ports are hardcoded in
+# compose.omni.yml; these defaults match. Override only to point a service
+# at an external host (e.g. a self-hosted AI service).
+SEARCHER_URL=http://searcher:3001
+INDEXER_URL=http://indexer:3002
+AI_SERVICE_URL=http://ai:3003
+CONNECTOR_MANAGER_URL=http://connector-manager:3004
+
+# Connectors enabled via compose profiles (comma-separated).
+# Available: google,slack,atlassian,web,github,notion,hubspot,fireflies,
+#            microsoft,filesystem,imap,linear,clickup,nextcloud,paperless
+# Each requires the matching service block (with `profiles: [<name>]`) in
+# compose.omni.yml.
+ENABLED_CONNECTORS=web
+COMPOSE_PROFILES=${ENABLED_CONNECTORS}
+
+# =============================================================================
+# Tunable: defaults defined in compose.omni.yml. Uncomment to override.
+# =============================================================================
+
+# --- Database pool ---
+#DB_MAX_CONNECTIONS=10
+#DB_ACQUIRE_TIMEOUT_SECONDS=3
+
+# --- Session ---
+#SESSION_COOKIE_NAME=auth-session
+#SESSION_DURATION_DAYS=7
+
+# --- AI service ---
+#AI_WORKERS=2
+
+# --- Connector manager scheduling ---
+#MAX_CONCURRENT_SYNCS=10
+#MAX_CONCURRENT_SYNCS_PER_TYPE=3
+#SCHEDULER_INTERVAL_SECONDS=60
+# Per-source recrawl/sync intervals are NOT env vars — configure them per
+# source in the admin UI; values are stored in the DB.
+
+# --- Storage backend (postgres = blobs in DB; s3 = use an S3 bucket) ---
+#STORAGE_BACKEND=postgres
+
+# --- Logging ---
+#RUST_LOG=info
