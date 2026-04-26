@@ -309,3 +309,37 @@ server {
         proxy_pass $up;
     }
 }
+
+# --- Omni (cuberone fork). Stack lives in compose.omni.yml; see CLAUDE.md.
+# omni-web is reachable on the shared `proxy_net` network. Whole site is
+# proxied as a single SPA + websocket upstream — no path splitting needed.
+server {
+    listen 443 ssl;
+    server_name omni.example.com;
+    client_max_body_size 100M;
+
+    ssl_certificate /etc/letsencrypt/live/huly/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/huly/privkey.pem;
+
+    # ACME HTTP-01 already handled by the catch-all :80 server block above —
+    # this vhost only listens on :443.
+
+    location / {
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+
+        # Defer DNS resolution to request time — same pattern as Huly's vhosts,
+        # so the omni stack can be down without crashing nginx on reload.
+        # Port 3000 matches the hardcoded `PORT: 3000` on the `web` service in
+        # compose.omni.yml. If you change one, change the other.
+        set $up http://omni-web:3000;
+        proxy_pass $up;
+
+        proxy_read_timeout 60s;
+        proxy_send_timeout 60s;
+    }
+}
