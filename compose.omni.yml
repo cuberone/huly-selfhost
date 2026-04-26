@@ -1,0 +1,251 @@
+# Omni stack — runs as a separate compose project (`-p omni`) on the same
+# host as the `huly` stack. nginx in the huly stack proxies the configured
+# Omni hostname (APP_URL in omni.conf) to the `omni-web` container over the
+# shared `proxy_net` network.
+#
+# Releases:  ./release.sh  (pulls + brings up both stacks)
+# Env:       /home/ubuntu/huly-selfhost/omni.conf  (gitignored, live values)
+# Images:    ghcr.io/cuberone/omni-private/...     (private — `docker login ghcr.io` once)
+#
+# Profile-gated connectors are enabled via ENABLED_CONNECTORS (comma-separated)
+# in omni.conf; COMPOSE_PROFILES picks them up automatically.
+#
+# Internal-port convention: every Rust service and the AI service read `PORT`
+# at startup. Internal listening ports are not bound to the host (no `ports:`
+# on any service) and never collide on the docker bridge — they're hardcoded
+# inline below rather than threaded through env vars. SvelteKit's adapter-node
+# also reads `PORT` (defaulting to 3000); we pass it explicitly for clarity.
+
+x-db-config: &db-config
+  DATABASE_HOST: ${DATABASE_HOST}
+  DATABASE_PORT: ${DATABASE_PORT}
+  DATABASE_USERNAME: ${DATABASE_USERNAME}
+  DATABASE_PASSWORD: ${DATABASE_PASSWORD}
+  DATABASE_NAME: ${DATABASE_NAME}
+  DB_MAX_CONNECTIONS: ${DB_MAX_CONNECTIONS:-10}
+  DB_ACQUIRE_TIMEOUT_SECONDS: ${DB_ACQUIRE_TIMEOUT_SECONDS:-3}
+
+x-redis-config: &redis-config
+  REDIS_URL: ${REDIS_URL}
+
+x-storage-config: &storage-config
+  STORAGE_BACKEND: ${STORAGE_BACKEND}
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "100m"
+    max-file: "10"
+    compress: "true"
+
+services:
+  postgres:
+    image: paradedb/paradedb:0.20.6-pg17
+    container_name: omni-postgres
+    shm_size: 4gb
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USERNAME} -d ${DATABASE_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - omni_net
+    restart: unless-stopped
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: omni-redis
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - omni_net
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Schema migrator: runs once per OMNI_VERSION and exits 0. Compose only
+  # recreates this container when the image tag changes (i.e. on version
+  # bump); on subsequent `up` calls with an unchanged image, the existing
+  # Exited(0) container satisfies dependents' `service_completed_successfully`
+  # immediately. To force a re-run (e.g. after manual schema surgery):
+  #   docker compose -p omni rm -f migrator && docker compose -p omni ... up -d
+  migrator:
+    image: ghcr.io/cuberone/omni-private/omni-migrator:${OMNI_VERSION:-latest}
+    container_name: omni-migrator
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: [*db-config]
+    networks:
+      - omni_net
+    restart: "no"
+    logging: *default-logging
+
+  searcher:
+    image: ghcr.io/cuberone/omni-private/omni-searcher:${OMNI_VERSION:-latest}
+    container_name: omni-searcher
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      <<: [*db-config, *redis-config, *storage-config]
+      PORT: 3001
+      AI_SERVICE_URL: ${AI_SERVICE_URL}
+      RUST_LOG: ${RUST_LOG:-info}
+    networks:
+      - omni_net
+    restart: unless-stopped
+    logging: *default-logging
+
+  indexer:
+    image: ghcr.io/cuberone/omni-private/omni-indexer:${OMNI_VERSION:-latest}
+    container_name: omni-indexer
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      <<: [*db-config, *redis-config, *storage-config]
+      PORT: 3002
+      AI_SERVICE_URL: ${AI_SERVICE_URL}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ENCRYPTION_SALT: ${ENCRYPTION_SALT}
+      RUST_LOG: ${RUST_LOG:-info}
+    networks:
+      - omni_net
+    restart: unless-stopped
+    logging: *default-logging
+
+  ai:
+    image: ghcr.io/cuberone/omni-private/omni-ai:${OMNI_VERSION:-latest}
+    container_name: omni-ai
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      <<: [*db-config, *redis-config, *storage-config]
+      PORT: 3003
+      MODEL_PATH: ${MODEL_PATH:-/models}
+      AI_WORKERS: ${AI_WORKERS:-2}
+      SEARCHER_URL: ${SEARCHER_URL}
+      CONNECTOR_MANAGER_URL: ${CONNECTOR_MANAGER_URL}
+      AGENTS_ENABLED: ${AGENTS_ENABLED:-false}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ENCRYPTION_SALT: ${ENCRYPTION_SALT}
+    volumes:
+      - ai_models:/models
+    networks:
+      - omni_net
+    restart: unless-stopped
+    logging: *default-logging
+
+  connector-manager:
+    image: ghcr.io/cuberone/omni-private/omni-connector-manager:${OMNI_VERSION:-latest}
+    container_name: omni-connector-manager
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      <<: [*db-config, *redis-config]
+      PORT: 3004
+      MAX_CONCURRENT_SYNCS: ${MAX_CONCURRENT_SYNCS:-10}
+      MAX_CONCURRENT_SYNCS_PER_TYPE: ${MAX_CONCURRENT_SYNCS_PER_TYPE:-3}
+      SCHEDULER_INTERVAL_SECONDS: ${SCHEDULER_INTERVAL_SECONDS:-60}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ENCRYPTION_SALT: ${ENCRYPTION_SALT}
+      RUST_LOG: ${RUST_LOG:-info}
+    networks:
+      - omni_net
+    restart: unless-stopped
+    logging: *default-logging
+
+  # `container_name: omni-web` already registers omni-web as a DNS alias on
+  # every network the container joins, so nginx (on proxy_net) can resolve
+  # `omni-web:3000` without an explicit `aliases:` block.
+  web:
+    image: ghcr.io/cuberone/omni-private/omni-web:${OMNI_VERSION:-latest}
+    container_name: omni-web
+    depends_on:
+      - searcher
+      - indexer
+      - ai
+      - connector-manager
+    environment:
+      <<: [*db-config, *redis-config]
+      PORT: 3000
+      SEARCHER_URL: ${SEARCHER_URL}
+      INDEXER_URL: ${INDEXER_URL}
+      AI_SERVICE_URL: ${AI_SERVICE_URL}
+      CONNECTOR_MANAGER_URL: ${CONNECTOR_MANAGER_URL}
+      APP_URL: ${APP_URL}
+      ORIGIN: ${APP_URL}
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-auth-session}
+      SESSION_DURATION_DAYS: ${SESSION_DURATION_DAYS:-7}
+      AI_ANSWER_ENABLED: ${AI_ANSWER_ENABLED:-false}
+      AGENTS_ENABLED: ${AGENTS_ENABLED:-false}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      ENCRYPTION_SALT: ${ENCRYPTION_SALT}
+    networks:
+      - omni_net
+      - proxy_net
+    restart: unless-stopped
+    logging: *default-logging
+
+  web-connector:
+    image: ghcr.io/cuberone/omni-private/omni-web-connector:${OMNI_VERSION:-latest}
+    container_name: omni-web-connector
+    profiles: [web]
+    depends_on:
+      connector-manager:
+        condition: service_started
+    environment:
+      <<: [*redis-config]
+      PORT: 4004
+      CONNECTOR_MANAGER_URL: ${CONNECTOR_MANAGER_URL}
+      RUST_LOG: ${RUST_LOG:-info}
+    networks:
+      - omni_net
+    restart: unless-stopped
+    logging: *default-logging
+
+networks:
+  omni_net:
+    driver: bridge
+  proxy_net:
+    external: true
+
+volumes:
+  postgres_data:
+    name: omni-postgres-data
+  redis_data:
+    name: omni-redis-data
+  ai_models:
+    name: omni-ai-models
