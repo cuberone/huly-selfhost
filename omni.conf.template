@@ -31,6 +31,12 @@ OMNI_IMAGE_PREFIX=CHANGE_ME_image_registry_and_namespace
 # completes successfully — otherwise pin to a real tag (e.g. v0.2.0).
 OMNI_VERSION=latest
 
+# Per-service tag override — e.g. when only the web image was rebuilt by a
+# branch push (path-filtered CI), pin OMNI_WEB_VERSION=master-<sha> while
+# leaving OMNI_VERSION at the last full release. Unset → falls through to
+# OMNI_VERSION. Same idea can be added for other services if needed.
+#OMNI_WEB_VERSION=
+
 # Database password. Generate with: openssl rand -hex 16
 DATABASE_PASSWORD=CHANGE_ME_long_random_string
 

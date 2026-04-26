@@ -196,7 +196,11 @@ services:
   # every network the container joins, so nginx (on proxy_net) can resolve
   # `omni-web:3000` without an explicit `aliases:` block.
   web:
-    image: ${OMNI_IMAGE_PREFIX:?OMNI_IMAGE_PREFIX must be set in omni.conf}/omni-web:${OMNI_VERSION:-latest}
+    # OMNI_WEB_VERSION lets us pin the web service to a different tag than the
+    # rest of the stack — e.g. a `master-<sha>` build of just the web service
+    # for a hotfix, while keeping searcher/indexer/ai/etc. on the last full
+    # release. Falls through to OMNI_VERSION when unset.
+    image: ${OMNI_IMAGE_PREFIX:?OMNI_IMAGE_PREFIX must be set in omni.conf}/omni-web:${OMNI_WEB_VERSION:-${OMNI_VERSION:-latest}}
     container_name: omni-web
     depends_on:
       - searcher
