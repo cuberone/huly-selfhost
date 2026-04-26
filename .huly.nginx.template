@@ -341,5 +341,12 @@ server {
 
         proxy_read_timeout 60s;
         proxy_send_timeout 60s;
+
+        # SvelteKit OAuth callbacks return a large Set-Cookie (session) plus
+        # CSP/HSTS/Referrer-Policy/etc. — blows past nginx's default 4-8k
+        # response-header buffer and 502s as "upstream sent too big header".
+        proxy_buffer_size 16k;
+        proxy_buffers 8 16k;
+        proxy_busy_buffers_size 32k;
     }
 }
