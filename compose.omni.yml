@@ -30,7 +30,11 @@ x-redis-config: &redis-config
   REDIS_URL: ${REDIS_URL}
 
 x-storage-config: &storage-config
-  STORAGE_BACKEND: ${STORAGE_BACKEND}
+  # Default `postgres` matches omni.conf.template's documented fallback
+  # ("Storage backend (postgres = blobs in DB; s3 = use an S3 bucket)").
+  # ai service rejects empty values (services/ai/storage.py:247), and the
+  # AI startup loop pegs CPU when this is unset — keep the default explicit.
+  STORAGE_BACKEND: ${STORAGE_BACKEND:-postgres}
 
 x-logging: &default-logging
   driver: "json-file"
