@@ -522,6 +522,7 @@ volumes:
 
 networks:
   huly_net:
+    name: huly_net
   # Shared external network used by both the `huly` and `omni` stacks so
   # nginx (in this stack) can resolve `omni-web` (in compose.omni.yml) by
   # name. Created out-of-band: `docker network create proxy_net`.
