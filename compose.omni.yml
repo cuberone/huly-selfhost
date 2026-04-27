@@ -249,11 +249,42 @@ services:
     restart: unless-stopped
     logging: *default-logging
 
+  # Huly connector — sibling-deployment only. Indexes content from the Huly
+  # workspace running in the `-p huly` compose project on this same host.
+  # Attaches to the external `huly_net` (literal name, pinned in compose.yml)
+  # so it can reach Huly's account/transactor/minio/collaborator services
+  # without going through the public ingress.
+  huly-connector:
+    image: ${OMNI_IMAGE_PREFIX:?OMNI_IMAGE_PREFIX must be set in omni.conf}/omni-huly-connector:${OMNI_VERSION:-latest}
+    container_name: omni-huly-connector
+    profiles: [huly]
+    depends_on:
+      connector-manager:
+        condition: service_started
+    environment:
+      PORT: 4016
+      # Same convention as web-connector: connector-manager calls back to
+      # this DNS alias on omni_net.
+      CONNECTOR_HOST_NAME: huly-connector
+      CONNECTOR_MANAGER_URL: ${CONNECTOR_MANAGER_URL}
+      NODE_ENV: production
+    networks:
+      - omni_net
+      - huly_net
+    restart: unless-stopped
+    logging: *default-logging
+
 networks:
   omni_net:
     driver: bridge
   proxy_net:
     external: true
+  # Cross-stack: pinned to literal name `huly_net` in the huly stack's
+  # compose.yml so this `external: true` reference resolves regardless
+  # of the huly compose project name. Required for huly-connector.
+  huly_net:
+    external: true
+    name: huly_net
 
 volumes:
   postgres_data:
