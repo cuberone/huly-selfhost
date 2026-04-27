@@ -251,41 +251,45 @@ services:
 
   # Local embeddings via Ollama. OpenAI-compatible /v1/embeddings endpoint
   # consumed by the `ai` service (Local provider, configured in the admin UI
-  # at /admin/settings/embeddings). Defaults to BGE-M3 (1024-dim dense), which
-  # matches the pre-baked partial HNSW index in services/migrations/042.
+  # at /admin/settings/embeddings). Default model is google/embeddinggemma-300m
+  # (768-dim dense), which matches the pre-baked partial HNSW index in
+  # services/migrations/042 and gives ~2× the throughput of BGE-M3 on CPU
+  # at comparable multilingual quality. Switch via EMBEDDING_MODEL.
   #
   # ws.ergomorph.com is single-vCPU + ~7.6 GiB RAM with Huly already resident,
   # so this service is hard-capped (cpus: 0.6, mem_limit: 2500m) to keep it
-  # from starving Huly/Postgres/web. Inference is CPU-bound at ~0.5–2 s per
-  # chunk; expect a multi-hour reindex when first switching the provider.
+  # from starving Huly/Postgres/web. Embeddinggemma-300m on this cap measures
+  # in the ~30–40 tok/s range; expect 1–3 h for a typical first reindex.
   #
-  # Tag pin: 0.5.7 because it's the last release verified to publish a clean
-  # arm64 manifest on Docker Hub. Bump intentionally.
+  # Image: `alpine/ollama` is a community Wolfi-based repackage (~700 MB vs
+  # ~3 GB for the official `ollama/ollama`), bash-less (sh-only), with the
+  # binary at /usr/bin/ollama. Same Ollama feature set; pin a specific tag
+  # so we don't get surprised by upstream packaging changes.
   #
   # First-deploy / model-change: the entrypoint pulls EMBEDDING_MODEL on boot
   # and survives if the pull fails (Ollama will retry on first request). Models
   # persist in the `ollama_models` volume across container restarts.
   embeddings:
-    image: ollama/ollama:0.5.7
+    image: alpine/ollama:0.21.2
     container_name: omni-embeddings
     profiles: [embeddings]
-    entrypoint: ["/bin/bash", "-c"]
+    entrypoint: ["/bin/sh", "-c"]
     command:
       - |
         set -e
-        /bin/ollama serve &
+        ollama serve &
         SERVE_PID=$$!
         echo "waiting for ollama daemon..."
-        until /bin/ollama list >/dev/null 2>&1; do sleep 1; done
+        until ollama list >/dev/null 2>&1; do sleep 1; done
         echo "pulling model: ${EMBEDDING_MODEL}"
-        /bin/ollama pull "${EMBEDDING_MODEL}" || echo "pull failed; will retry on demand"
+        ollama pull "${EMBEDDING_MODEL}" || echo "pull failed; will retry on demand"
         wait $$SERVE_PID
     environment:
       OLLAMA_HOST: 0.0.0.0:${LOCAL_EMBEDDINGS_PORT:-11434}
       # Keep model resident; otherwise Ollama unloads after 5min idle and
       # the next embedding call eats a multi-second cold start.
       OLLAMA_KEEP_ALIVE: "24h"
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-bge-m3}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-embeddinggemma:300m}
     expose:
       - "${LOCAL_EMBEDDINGS_PORT:-11434}"
     volumes:
@@ -298,7 +302,7 @@ services:
     healthcheck:
       # `ollama list` returns 0 once the daemon is up, even before the model
       # finishes downloading. Sufficient for compose readiness.
-      test: ["CMD-SHELL", "/bin/ollama list >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "ollama list >/dev/null 2>&1"]
       interval: 30s
       timeout: 10s
       retries: 5
