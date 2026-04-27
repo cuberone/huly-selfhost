@@ -81,21 +81,22 @@ CONNECTOR_MANAGER_URL=http://connector-manager:3004
 ENABLED_CONNECTORS=web
 
 # Optional: add `embeddings` to also start the local Ollama embeddings
-# service (google/embeddinggemma-300m by default). After enabling, configure
-# the provider in the admin UI at /admin/settings/embeddings:
+# service (ggml-org's Q8_0 GGUF of google/embeddinggemma-300m by default).
+# After enabling, configure the provider in the admin UI at
+# /admin/settings/embeddings:
 #   - Type:  Local
 #   - URL:   http://embeddings:11434/v1
-#   - Model: embeddinggemma:300m
+#   - Model: hf.co/ggml-org/embeddinggemma-300M-GGUF:Q8_0
 #   - Click "Set as Current" to trigger reindex.
 COMPOSE_PROFILES=${ENABLED_CONNECTORS}
 
 # Local embeddings (Ollama). Only used when COMPOSE_PROFILES includes
-# `embeddings`. EMBEDDING_MODEL is an Ollama model name (see
-# https://ollama.com/library). embeddinggemma:300m outputs 768-dim dense
-# vectors and matches the pre-baked partial HNSW index. Other multilingual
-# choices: bge-m3 (1024-dim, slower but stronger) or mxbai-embed-large
-# (English-only).
-#EMBEDDING_MODEL=embeddinggemma:300m
+# `embeddings`. EMBEDDING_MODEL is any pullable Ollama tag — official library
+# (https://ollama.com/library) or a HuggingFace GGUF (hf.co/<repo>:<quant>).
+# Default produces 768-dim dense vectors matching the pre-baked HNSW partial
+# index. Other choices: embeddinggemma:300m-qat-q4_0 (slightly faster, Q4),
+# bge-m3 (1024-dim, slower but stronger multilingual).
+#EMBEDDING_MODEL=hf.co/ggml-org/embeddinggemma-300M-GGUF:Q8_0
 #LOCAL_EMBEDDINGS_PORT=11434
 
 # =============================================================================

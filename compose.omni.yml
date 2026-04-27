@@ -251,15 +251,17 @@ services:
 
   # Local embeddings via Ollama. OpenAI-compatible /v1/embeddings endpoint
   # consumed by the `ai` service (Local provider, configured in the admin UI
-  # at /admin/settings/embeddings). Default model is google/embeddinggemma-300m
-  # (768-dim dense), which matches the pre-baked partial HNSW index in
-  # services/migrations/042 and gives ~2× the throughput of BGE-M3 on CPU
-  # at comparable multilingual quality. Switch via EMBEDDING_MODEL.
+  # at /admin/settings/embeddings). Default is the ggml-org canonical Q8_0
+  # GGUF of google/embeddinggemma-300m (768-dim dense), which matches the
+  # pre-baked partial HNSW index in services/migrations/042. Q8_0 is chosen
+  # over Q4 because Graviton4's i8mm instructions make int8 matmul native:
+  # measured ~55 tok/s, statistically tied with the QAT-Q4_0 variant but
+  # with near-FP retrieval quality. Switch via EMBEDDING_MODEL.
   #
   # ws.ergomorph.com is single-vCPU + ~7.6 GiB RAM with Huly already resident,
   # so this service is hard-capped (cpus: 0.6, mem_limit: 2500m) to keep it
-  # from starving Huly/Postgres/web. Embeddinggemma-300m on this cap measures
-  # in the ~30–40 tok/s range; expect 1–3 h for a typical first reindex.
+  # from starving Huly/Postgres/web. Per-chunk latency at this cap is ~5.5 s
+  # for ~300-token inputs; first reindex of a typical corpus is ~1–2 h.
   #
   # Image: `alpine/ollama` is a community Wolfi-based repackage (~700 MB vs
   # ~3 GB for the official `ollama/ollama`), bash-less (sh-only), with the
@@ -289,7 +291,7 @@ services:
       # Keep model resident; otherwise Ollama unloads after 5min idle and
       # the next embedding call eats a multi-second cold start.
       OLLAMA_KEEP_ALIVE: "24h"
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-embeddinggemma:300m}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-hf.co/ggml-org/embeddinggemma-300M-GGUF:Q8_0}
     expose:
       - "${LOCAL_EMBEDDINGS_PORT:-11434}"
     volumes:
