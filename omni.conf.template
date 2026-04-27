@@ -79,7 +79,22 @@ CONNECTOR_MANAGER_URL=http://connector-manager:3004
 # Each requires the matching service block (with `profiles: [<name>]`) in
 # compose.omni.yml.
 ENABLED_CONNECTORS=web
+
+# Optional: add `embeddings` to also start the local Ollama embeddings
+# service (BGE-M3 by default). After enabling, configure the provider in
+# the admin UI at /admin/settings/embeddings:
+#   - Type:  Local
+#   - URL:   http://embeddings:11434/v1
+#   - Model: bge-m3
+#   - Click "Set as Current" to trigger reindex.
 COMPOSE_PROFILES=${ENABLED_CONNECTORS}
+
+# Local embeddings (Ollama). Only used when COMPOSE_PROFILES includes
+# `embeddings`. EMBEDDING_MODEL is an Ollama model name (see
+# https://ollama.com/library). BGE-M3 outputs 1024-dim dense vectors,
+# matching the pre-baked partial HNSW index.
+#EMBEDDING_MODEL=bge-m3
+#LOCAL_EMBEDDINGS_PORT=11434
 
 # =============================================================================
 # Tunable: defaults defined in compose.omni.yml. Uncomment to override.
