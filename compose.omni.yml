@@ -161,8 +161,13 @@ services:
       AGENTS_ENABLED: ${AGENTS_ENABLED:-false}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       ENCRYPTION_SALT: ${ENCRYPTION_SALT}
+      MEMORY_ENABLED: ${MEMORY_ENABLED:-true}
+      MEM0AI_DATABASE_USER: ${MEM0AI_DATABASE_USER:-mem0ai}
+      MEM0AI_DATABASE_ROLE_PASSWORD: ${MEM0AI_DATABASE_ROLE_PASSWORD}
+      MEM0_HISTORY_DB_PATH: ${MEM0_HISTORY_DB_PATH:-/var/lib/mem0/history.db}
     volumes:
       - ai_models:/models
+      - mem0_history:/var/lib/mem0
     networks:
       - omni_net
     restart: unless-stopped
@@ -357,3 +362,5 @@ volumes:
     name: omni-ai-models
   ollama_models:
     name: omni-ollama-models
+  mem0_history:
+    name: omni-mem0-history
