@@ -137,6 +137,7 @@ services:
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       ENCRYPTION_SALT: ${ENCRYPTION_SALT}
       RUST_LOG: ${RUST_LOG:-info}
+      INDEXER_FULL_BATCH_MAX_AGE_SECS: ${INDEXER_FULL_BATCH_MAX_AGE_SECS:-300}
     networks:
       - omni_net
     restart: unless-stopped
